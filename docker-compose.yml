@@ -53,5 +53,15 @@ services:
     volumes:
       - ./recommendations:/app/recommendations
 
+  api:
+    build: ./api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://research_graph:research_graph@postgres:5432/research_graph
+    ports:
+      - "8000:8000"
+
 volumes:
   pgdata:
