@@ -5,7 +5,9 @@ Pipeline poliglota (Java na borda de aquisição, Python no núcleo de
 ML/recomendação): **crawler → processing (ingestion + embedding) →
 database → api**. Decisões de arquitetura, alternativas consideradas e
 limitações conhecidas de cada etapa estão documentadas em
-[`ROADMAP.md`](ROADMAP.md) — este README é só o mapa geral + como rodar.
+[`ROADMAP.md`](ROADMAP.md); um passo a passo narrado de como operar o
+sistema (com exemplo prático e solução de problemas comuns) está em
+[`USAGE.md`](USAGE.md) — este README é só o mapa geral + como rodar.
 
 ## Requisitos
 
