@@ -43,7 +43,12 @@ python -m recommender.cli --query "design de interfaces para aplicativos de stre
 
 ## Rodando com Docker
 
+PyTorch + `sentence-transformers` vêm da imagem base
+[`ml-base/`](../ml-base/README.md) (compartilhada com `embedding/` e
+`api/`) — **precisa buildar `ml-base/` antes** (ver seu README):
+
 ```
+docker build -t poc-research-graph-ml-base:latest ./ml-base   # se ainda não existir
 docker compose run --rm recommender --cod-acervo 100 --top-n 5
 docker compose run --rm recommender --query "design de interfaces para aplicativos de streaming"
 ```
