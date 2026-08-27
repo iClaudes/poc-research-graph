@@ -8,11 +8,11 @@ import sys
 import psycopg
 from pgvector.psycopg import register_vector
 
-from recommender.embedder import DEFAULT_MODEL, Embedder
-from recommender.search import fetch_document_vectors, recommend
+from api.embedder import DEFAULT_MODEL, Embedder
+from api.search import fetch_document_vectors, recommend
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-5s %(message)s")
-logger = logging.getLogger("recommender")
+logger = logging.getLogger("api.cli")
 
 DEFAULT_DATABASE_URL = "postgresql://research_graph:research_graph@postgres:5432/research_graph"
 

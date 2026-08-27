@@ -34,9 +34,9 @@ ser revisitados quando o modelo for definido.
 Requer Python 3.12+.
 
 ```
-cd ingestion
+cd processing/ingestion
 pip install -r requirements.txt
-python -m ingestion.cli --in ../downloads --out ../ingested [--chunk-size 1000] [--chunk-overlap 150]
+python -m ingestion.cli --in ../../downloads --out ../../ingested [--chunk-size 1000] [--chunk-overlap 150]
 ```
 
 ## Rodando com Docker
@@ -44,7 +44,7 @@ python -m ingestion.cli --in ../downloads --out ../ingested [--chunk-size 1000] 
 A partir da raiz do repositório:
 
 ```
-docker build -t ingestion ./ingestion
+docker build -t ingestion ./processing/ingestion
 docker run --rm -v "$(pwd)/downloads:/app/downloads:ro" -v "$(pwd)/ingested:/app/ingested" ingestion
 ```
 
