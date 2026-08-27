@@ -5,8 +5,9 @@ PostgreSQL/pgvector → Recomendação**. Para o que já foi feito e testado, ve
 [`crawler/README.md`](crawler/README.md),
 [`processing/ingestion/README.md`](processing/ingestion/README.md),
 [`processing/embedding/README.md`](processing/embedding/README.md),
-[`database/README.md`](database/README.md) e
-[`api/README.md`](api/README.md).
+[`database/README.md`](database/README.md),
+[`api/README.md`](api/README.md) e
+[`ml-base/README.md`](ml-base/README.md).
 
 ## Stack por módulo
 
@@ -26,6 +27,13 @@ reais desse tipo.
 separação de Dockerfile/imagem de sempre, só agrupados numa pasta pra
 navegação (pesos de dependência muito diferentes pra fundir as imagens:
 `ingestion/` é leve, `embedding/` carrega a stack de ML via `ml-base/`).
+
+`ml-base/` fica solto na raiz, não dentro de `database/` nem de um
+diretório-pai tipo "infra/": é uma imagem base de build (PyTorch CPU-only
++ `sentence-transformers` + modelo, reaproveitada por `processing/embedding/`
+e `api/`), nunca roda como serviço. `database/` é um serviço com estado de
+verdade (Postgres). São categorias diferentes — agrupar as duas só por
+"nenhuma é lógica de negócio" bagunçaria mais do que ajudaria.
 
 ## Próximos passos
 
