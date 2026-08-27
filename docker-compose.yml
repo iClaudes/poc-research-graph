@@ -1,0 +1,11 @@
+services:
+  crawler:
+    build: .
+    volumes:
+      - ./downloads:/app/downloads
+
+  ingestion:
+    build: ./ingestion
+    volumes:
+      - ./downloads:/app/downloads:ro
+      - ./ingested:/app/ingested

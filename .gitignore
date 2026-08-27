@@ -29,5 +29,14 @@ target/
 # Crawler output (downloaded PDFs/metadata, not source)
 downloads/
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Ingestion output
+ingested/
+
 # IDE
 .idea/
