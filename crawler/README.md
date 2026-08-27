@@ -61,6 +61,26 @@ Para cada ID na faixa que for Tese/Dissertação/TCC com PDF disponível, gera:
 Registros sem PDF elegível (livros, teses sem PDF anexado, etc.) e IDs
 inexistentes (404) são pulados e contabilizados no resumo impresso ao final.
 
+## Rodando com Docker
+
+Não é preciso ter Maven/JDK instalados — o build da imagem já compila o jar.
+A partir da raiz do repositório:
+
+```
+docker build -t crawler .
+docker run --rm -v "$(pwd)/downloads:/app/downloads" crawler --start 1 --end 500 --out /app/downloads --delay-ms 500
+```
+
+Ou via docker compose (o volume `./downloads:/app/downloads` já vem
+configurado no `docker-compose.yml`):
+
+```
+docker compose run --rm crawler --start 1 --end 500 --out /app/downloads --delay-ms 500
+```
+
+Os arquivos baixados aparecem em `./downloads` no host, já que o diretório é
+montado como volume — nada fica preso dentro do container.
+
 ## Como testar
 
 1. Build: `mvn clean package`.
