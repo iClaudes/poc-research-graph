@@ -11,7 +11,7 @@ produzidos pelo `embedding/` no banco.
   CASCADE`, `chunk_index`, `text`, offsets, `embedding VECTOR(384)`,
   `embedding_model`). `UNIQUE (cod_acervo, chunk_index)`.
 - Índice `hnsw` em `chunks.embedding` com `vector_cosine_ops` — busca por
-  similaridade de cosseno, usada pelo `recommender/` na próxima etapa. HNSW
+  similaridade de cosseno, usada pelo `api/` na próxima etapa. HNSW
   foi escolhido em vez de `ivfflat` por não exigir dados pré-carregados nem
   ajuste de parâmetro (`lists`) pra ficar eficaz.
 

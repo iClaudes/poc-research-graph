@@ -2,23 +2,22 @@
 Sistema de aquisição e recomendação de documentos baseado em processamento semântico, embeddings e busca vetorial com PostgreSQL/pgvector.
 
 Pipeline poliglota (Java na borda de aquisição, Python no núcleo de
-ML/recomendação) com 6 módulos independentes, cada um seu próprio
-Dockerfile: **crawler → ingestion → embedding → database →
-recommender/api**. Decisões de arquitetura, alternativas consideradas e
+ML/recomendação): **crawler → processing (ingestion + embedding) →
+database → api**. Decisões de arquitetura, alternativas consideradas e
 limitações conhecidas de cada etapa estão documentadas em
 [`ROADMAP.md`](ROADMAP.md) — este README é só o mapa geral + como rodar.
 
 ## Requisitos
 
 - Docker + Docker Compose v2 (`docker compose`, não `docker-compose`).
-- **~15–18 GB de espaço em disco.** `embedding/`, `recommender/` e `api/`
+- **~15–18 GB de espaço em disco.** `processing/embedding/` e `api/`
   compartilham uma imagem base ([`ml-base/`](ml-base/README.md), ~2,9 GB)
   com PyTorch (build **CPU-only** — o wheel padrão do PyPI traz ~4,6 GB de
   bibliotecas CUDA/NVIDIA não usadas, já que nenhum container aqui tem
-  GPU) + `sentence-transformers` + o modelo já baixado. Cada um dos três
+  GPU) + `sentence-transformers` + o modelo já baixado. Cada um dos dois
   soma só suas próprias dependências extras em cima disso (poucos MB).
-  `crawler`/`ingestion`/`database` são independentes e leves (200–450 MB
-  cada).
+  `crawler`/`processing/ingestion`/`database` são independentes e leves
+  (200–450 MB cada).
 - Acesso à rede: `crawler` baixa de `biblioteca.cesar.school` e
   `drive.google.com`; `ml-base` baixa PyTorch, `sentence-transformers` e os
   pesos do modelo (`paraphrase-multilingual-MiniLM-L12-v2`) durante o
@@ -32,17 +31,16 @@ limitações conhecidas de cada etapa estão documentadas em
 | Módulo | O que faz | Tecnologia | Tipo |
 |---|---|---|---|
 | [`crawler/`](crawler/README.md) | Varre o acervo da Biblioteca CESAR por id, baixa PDF + metadados de TCCs/dissertações/teses elegíveis. | Java 17 + Maven | Batch (`run --rm`) |
-| [`ingestion/`](ingestion/README.md) | Extrai texto dos PDFs, remove cabeçalho/rodapé repetido, gera chunks de tamanho fixo. | Python 3.12 + `pypdf` | Batch (`run --rm`) |
-| [`ml-base/`](ml-base/README.md) | Imagem base compartilhada por `embedding/`/`recommender/`/`api/` — PyTorch CPU-only + `sentence-transformers` + modelo já baixado. Não é um serviço, precisa ser buildada antes dos três. | — | Imagem base (`docker build`) |
-| [`embedding/`](embedding/README.md) | Gera um vetor de 384 dimensões por chunk com um modelo local multilíngue. | Python 3.12 + `sentence-transformers` (via `ml-base/`) | Batch (`run --rm`) |
+| [`ml-base/`](ml-base/README.md) | Imagem base compartilhada por `processing/embedding/` e `api/` — PyTorch CPU-only + `sentence-transformers` + modelo já baixado. Não é um serviço, precisa ser buildada antes dos dois. | — | Imagem base (`docker build`) |
+| [`processing/`](processing/README.md) | Agrupa os dois estágios de processamento de texto: [`ingestion/`](processing/ingestion/README.md) (extrai texto dos PDFs, gera chunks) e [`embedding/`](processing/embedding/README.md) (gera vetores de 384 dim por chunk). Dockerfiles/imagens separados de propósito — pesos de dependência bem diferentes. | Python 3.12 (`pypdf` / `sentence-transformers` via `ml-base/`) | Batch (`run --rm`) |
 | [`database/`](database/README.md) | Schema PostgreSQL/pgvector (índice HNSW) + loader idempotente dos chunks/vetores. | PostgreSQL 16 + pgvector | Serviço (`postgres`, longa duração) + loader batch |
-| [`recommender/`](recommender/README.md) | CLI: recomenda documentos por id existente ou por busca em texto livre, via similaridade máxima entre chunks. | Python 3.12 + `psycopg`/`pgvector`/`sentence-transformers` | Batch (`run --rm`) |
-| [`api/`](api/README.md) | Expõe a mesma lógica do `recommender/` como serviço HTTP (`/search`, `/documents/{id}/recommendations`, docs em `/docs`). | Python 3.12 + FastAPI + Uvicorn | Serviço (longa duração) |
+| [`api/`](api/README.md) | Recomenda documentos por id existente ou por busca em texto livre, via similaridade máxima entre chunks — como CLI (`python -m api.cli`) e como serviço HTTP (`/search`, `/documents/{id}/recommendations`, docs em `/docs`), mesmo código pros dois. | Python 3.12 + FastAPI/Uvicorn + `psycopg`/`pgvector`/`sentence-transformers` | CLI batch + serviço HTTP (longa duração) |
 
-`crawler`/`ingestion`/`embedding`/`db-loader`/`recommender` são ferramentas
-batch (`docker compose run --rm ...`, cada uma processa e termina).
-`postgres` e `api` são os únicos serviços de longa duração (`docker compose
-up -d ...`).
+`crawler`/`ingestion`/`embedding`/`db-loader` são ferramentas batch
+(`docker compose run --rm ...`, cada uma processa e termina). `api` serve
+os dois papéis: `docker compose run --rm api python -m api.cli ...` pra
+uso pontual, ou `docker compose up -d api` pra deixar o servidor HTTP de
+pé (junto com `postgres`, os únicos serviços de longa duração).
 
 ## Quickstart
 
@@ -64,8 +62,8 @@ docker compose up -d postgres
 docker compose run --rm db-loader
 
 # 5a. recomendar via CLI (por documento ou por busca em texto livre)
-docker compose run --rm recommender --cod-acervo 100 --top-n 5
-docker compose run --rm recommender --query "design de interfaces para aplicativos de streaming"
+docker compose run --rm api python -m api.cli --cod-acervo 100 --top-n 5
+docker compose run --rm api python -m api.cli --query "design de interfaces para aplicativos de streaming"
 
 # 5b. ou subir a API e consultar via HTTP
 docker compose up -d api

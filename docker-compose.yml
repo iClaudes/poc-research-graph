@@ -5,13 +5,13 @@ services:
       - ./downloads:/app/downloads
 
   ingestion:
-    build: ./ingestion
+    build: ./processing/ingestion
     volumes:
       - ./downloads:/app/downloads:ro
       - ./ingested:/app/ingested
 
   embedding:
-    build: ./embedding
+    build: ./processing/embedding
     volumes:
       - ./ingested:/app/ingested:ro
       - ./embedded:/app/embedded
@@ -43,16 +43,6 @@ services:
     volumes:
       - ./embedded:/app/embedded:ro
 
-  recommender:
-    build: ./recommender
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://research_graph:research_graph@postgres:5432/research_graph
-    volumes:
-      - ./recommendations:/app/recommendations
-
   api:
     build: ./api
     depends_on:
@@ -62,6 +52,8 @@ services:
       DATABASE_URL: postgresql://research_graph:research_graph@postgres:5432/research_graph
     ports:
       - "8000:8000"
+    volumes:
+      - ./recommendations:/app/recommendations
 
 volumes:
   pgdata:

@@ -1,11 +1,11 @@
 # ml-base
 
-Imagem base compartilhada por `embedding/`, `recommender/` e `api/` — os
-três módulos que precisam do `sentence-transformers`
+Imagem base compartilhada por `processing/embedding/` e `api/` — os dois
+módulos que precisam do `sentence-transformers`
 (`paraphrase-multilingual-MiniLM-L12-v2`) rodando localmente. Não é um
 serviço (não faz parte do `docker-compose.yml`, nunca é executado sozinho)
 — é só a camada pesada de dependências, construída uma vez e reaproveitada
-pelos três, em vez de cada um baixar sua própria cópia de PyTorch +
+pelos dois, em vez de cada um baixar sua própria cópia de PyTorch +
 `sentence-transformers` + o modelo.
 
 Contém:
@@ -19,10 +19,9 @@ Contém:
 
 ## Build
 
-**Precisa ser construída antes de `embedding/`, `recommender/` ou
-`api/`** — os Dockerfiles deles usam `FROM
-poc-research-graph-ml-base:latest`, que precisa existir localmente (não é
-publicada em nenhum registry):
+**Precisa ser construída antes de `processing/embedding/` ou `api/`** — os
+Dockerfiles deles usam `FROM poc-research-graph-ml-base:latest`, que
+precisa existir localmente (não é publicada em nenhum registry):
 
 ```
 docker build -t poc-research-graph-ml-base:latest ./ml-base
@@ -30,4 +29,4 @@ docker build -t poc-research-graph-ml-base:latest ./ml-base
 
 Reconstrua sempre que mudar a versão do PyTorch/`sentence-transformers`
 aqui — os módulos dependentes só pegam a mudança depois de rebuildados
-também (`docker compose build embedding recommender api`).
+também (`docker compose build embedding api`).

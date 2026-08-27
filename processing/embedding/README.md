@@ -17,9 +17,9 @@ Gera os vetores de embedding a partir dos chunks de texto produzidos pelo
   sem dependência externa em tempo de execução.
 
 PyTorch (CPU-only) + `sentence-transformers` + os pesos do modelo já vêm
-prontos da imagem base [`ml-base/`](../ml-base/README.md) (compartilhada
-com `recommender/` e `api/`) — este `Dockerfile` só adiciona o código do
-módulo em cima. **Precisa buildar `ml-base/` antes** (ver seu README).
+prontos da imagem base [`ml-base/`](../../ml-base/README.md) (compartilhada
+com `api/`) — este `Dockerfile` só adiciona o código do módulo em cima.
+**Precisa buildar `ml-base/` antes** (ver seu README).
 
 ## Formato de entrada
 
@@ -43,9 +43,9 @@ gerou o vetor, caso o modelo mude no futuro.
 Requer Python 3.12+.
 
 ```
-cd embedding
+cd processing/embedding
 pip install -r requirements.txt
-python -m embedding.cli --in ../ingested --out ../embedded [--model paraphrase-multilingual-MiniLM-L12-v2] [--batch-size 32]
+python -m embedding.cli --in ../../ingested --out ../../embedded [--model paraphrase-multilingual-MiniLM-L12-v2] [--batch-size 32]
 ```
 
 ## Rodando com Docker
@@ -55,7 +55,7 @@ localmente primeiro):
 
 ```
 docker build -t poc-research-graph-ml-base:latest ./ml-base   # se ainda não existir
-docker build -t embedding ./embedding
+docker build -t embedding ./processing/embedding
 docker run --rm -v "$(pwd)/ingested:/app/ingested:ro" -v "$(pwd)/embedded:/app/embedded" embedding
 ```
 
