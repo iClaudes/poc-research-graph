@@ -38,5 +38,8 @@ venv/
 # Ingestion output
 ingested/
 
+# Embedding output
+embedded/
+
 # IDE
 .idea/

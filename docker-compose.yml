@@ -9,3 +9,9 @@ services:
     volumes:
       - ./downloads:/app/downloads:ro
       - ./ingested:/app/ingested
+
+  embedding:
+    build: ./embedding
+    volumes:
+      - ./ingested:/app/ingested:ro
+      - ./embedded:/app/embedded
