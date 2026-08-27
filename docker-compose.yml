@@ -1,0 +1,59 @@
+services:
+  crawler:
+    build: .
+    volumes:
+      - ./downloads:/app/downloads
+
+  ingestion:
+    build: ./processing/ingestion
+    volumes:
+      - ./downloads:/app/downloads:ro
+      - ./ingested:/app/ingested
+
+  embedding:
+    build: ./processing/embedding
+    volumes:
+      - ./ingested:/app/ingested:ro
+      - ./embedded:/app/embedded
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: research_graph
+      POSTGRES_PASSWORD: research_graph
+      POSTGRES_DB: research_graph
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U research_graph -d research_graph"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  db-loader:
+    build: ./database
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://research_graph:research_graph@postgres:5432/research_graph
+    volumes:
+      - ./embedded:/app/embedded:ro
+
+  api:
+    build: ./api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://research_graph:research_graph@postgres:5432/research_graph
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./recommendations:/app/recommendations
+
+volumes:
+  pgdata:

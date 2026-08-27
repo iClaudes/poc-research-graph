@@ -22,3 +22,27 @@
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Maven
+target/
+
+# Crawler output (downloaded PDFs/metadata, not source)
+downloads/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Ingestion output
+ingested/
+
+# Embedding output
+embedded/
+
+# Recommender output (opcional, via --out)
+recommendations/
+
+# IDE
+.idea/
