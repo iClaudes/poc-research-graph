@@ -26,7 +26,12 @@ Documentação interativa (Swagger UI) em `/docs`.
 
 ## Rodando com Docker
 
+PyTorch + `sentence-transformers` vêm da imagem base
+[`ml-base/`](../ml-base/README.md) (compartilhada com `embedding/` e
+`recommender/`) — **precisa buildar `ml-base/` antes** (ver seu README):
+
 ```
+docker build -t poc-research-graph-ml-base:latest ./ml-base   # se ainda não existir
 docker compose up -d postgres api
 ```
 

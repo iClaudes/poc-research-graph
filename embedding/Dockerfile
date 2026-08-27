@@ -1,14 +1,5 @@
-FROM python:3.12-slim
+FROM poc-research-graph-ml-base:latest
 WORKDIR /app
-
-RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
-
 COPY embedding ./embedding
 RUN mkdir -p ingested embedded
 ENTRYPOINT ["python", "-m", "embedding.cli"]

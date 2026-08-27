@@ -16,8 +16,10 @@ Gera os vetores de embedding a partir dos chunks de texto produzidos pelo
 - Rodando local (não API de terceiro): sem custo por chamada, valida rápido
   sem dependência externa em tempo de execução.
 
-Os pesos do modelo são baixados em **tempo de build** da imagem Docker (não
-no primeiro `docker run`) — ver `Dockerfile`.
+PyTorch (CPU-only) + `sentence-transformers` + os pesos do modelo já vêm
+prontos da imagem base [`ml-base/`](../ml-base/README.md) (compartilhada
+com `recommender/` e `api/`) — este `Dockerfile` só adiciona o código do
+módulo em cima. **Precisa buildar `ml-base/` antes** (ver seu README).
 
 ## Formato de entrada
 
@@ -48,9 +50,11 @@ python -m embedding.cli --in ../ingested --out ../embedded [--model paraphrase-m
 
 ## Rodando com Docker
 
-A partir da raiz do repositório:
+A partir da raiz do repositório (a imagem `ml-base` precisa existir
+localmente primeiro):
 
 ```
+docker build -t poc-research-graph-ml-base:latest ./ml-base   # se ainda não existir
 docker build -t embedding ./embedding
 docker run --rm -v "$(pwd)/ingested:/app/ingested:ro" -v "$(pwd)/embedded:/app/embedded" embedding
 ```
