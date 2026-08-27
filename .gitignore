@@ -41,5 +41,8 @@ ingested/
 # Embedding output
 embedded/
 
+# Recommender output (opcional, via --out)
+recommendations/
+
 # IDE
 .idea/
