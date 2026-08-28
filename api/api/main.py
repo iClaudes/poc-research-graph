@@ -1,8 +1,10 @@
 """API HTTP (FastAPI) para busca semântica e recomendação sobre o acervo CESAR."""
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -72,3 +74,10 @@ def search(q: str, top_n: int = 5):
     query_vector = app.state.embedder.encode_one(q)
     with app.state.pool.connection() as conn:
         return recommend(conn, [query_vector], exclude_cod_acervo=None, top_n=top_n)
+
+
+# Servida por último: interface web (SPA em HTML/JS puro), com fallback para
+# index.html em qualquer path não reconhecido — mas como a navegação da SPA é
+# via hash (#/...), o servidor nunca recebe esses paths, só sempre "/".
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

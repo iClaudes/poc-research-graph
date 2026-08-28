@@ -100,6 +100,14 @@ curl "localhost:8000/documents/100/recommendations?top_n=5"
 ```
 Documentação interativa em `http://localhost:8000/docs`.
 
+**Via navegador**, mesma API, sem montar URL na mão:
+```
+docker compose up -d api
+```
+Abra `http://localhost:8000/` — busca por texto no topo, lista de
+documentos paginada abaixo, clique num documento pra ver detalhe e
+recomendações.
+
 ## Exemplo prático: achar documentos por tema
 
 Depois dos passos 1–4 rodados (mesmo que só com uma faixa pequena, tipo

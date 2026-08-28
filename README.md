@@ -36,7 +36,7 @@ sistema (com exemplo prático e solução de problemas comuns) está em
 | [`ml-base/`](ml-base/README.md) | Imagem base compartilhada por `processing/embedding/` e `api/` — PyTorch CPU-only + `sentence-transformers` + modelo já baixado. Não é um serviço, precisa ser buildada antes dos dois. Fica solta na raiz (não agrupada com `database/` como "infra"): é uma camada de build reaproveitada por outros módulos, `database/` é um serviço com estado de verdade — categorias diferentes, agrupar as duas só pelo "não é lógica de negócio" bagunçaria mais do que ajudaria. | — | Imagem base (`docker build`) |
 | [`processing/`](processing/README.md) | Agrupa os dois estágios de processamento de texto: [`ingestion/`](processing/ingestion/README.md) (extrai texto dos PDFs, gera chunks) e [`embedding/`](processing/embedding/README.md) (gera vetores de 384 dim por chunk). Dockerfiles/imagens separados de propósito — pesos de dependência bem diferentes. | Python 3.12 (`pypdf` / `sentence-transformers` via `ml-base/`) | Batch (`run --rm`) |
 | [`database/`](database/README.md) | Schema PostgreSQL/pgvector (índice HNSW) + loader idempotente dos chunks/vetores. | PostgreSQL 16 + pgvector | Serviço (`postgres`, longa duração) + loader batch |
-| [`api/`](api/README.md) | Recomenda documentos por id existente ou por busca em texto livre, via similaridade máxima entre chunks — como CLI (`python -m api.cli`) e como serviço HTTP (`/search`, `/documents/{id}/recommendations`, docs em `/docs`), mesmo código pros dois. | Python 3.12 + FastAPI/Uvicorn + `psycopg`/`pgvector`/`sentence-transformers` | CLI batch + serviço HTTP (longa duração) |
+| [`api/`](api/README.md) | Recomenda documentos por id existente ou por busca em texto livre, via similaridade máxima entre chunks — como CLI (`python -m api.cli`), como serviço HTTP (`/search`, `/documents/{id}/recommendations`, docs em `/docs`) e como interface web simples (HTML/JS puro, sem build, servida na raiz `/` pelo mesmo processo), mesmo código pros três. | Python 3.12 + FastAPI/Uvicorn + `psycopg`/`pgvector`/`sentence-transformers` | CLI batch + serviço HTTP (longa duração) |
 
 `crawler`/`ingestion`/`embedding`/`db-loader` são ferramentas batch
 (`docker compose run --rm ...`, cada uma processa e termina). `api` serve
@@ -71,6 +71,8 @@ docker compose run --rm api python -m api.cli --query "design de interfaces para
 docker compose up -d api
 curl "localhost:8000/search?q=design+de+interfaces+para+streaming&top_n=5"
 curl "localhost:8000/documents/100/recommendations?top_n=5"
+
+# 5c. ou abrir http://localhost:8000/ no navegador (mesma API, interface web)
 ```
 
 Detalhes de cada comando (flags, formato de entrada/saída, plano de teste
