@@ -55,6 +55,21 @@ README).
 
 Documentação interativa (Swagger UI) em `/docs`.
 
+### Interface web
+
+`GET /` (e demais paths estáticos) serve uma SPA em HTML/JS puro a partir
+de `api/static/` — sem Node, sem build, sem framework: `index.html` +
+`style.css` + três scripts clássicos (`api.js` chamadas fetch, `ui.js`
+renderização, `app.js` roteamento). É o mesmo processo Uvicorn do serviço
+HTTP (`app.mount("/", StaticFiles(...))` em `main.py`, registrado por
+último para não conflitar com as rotas de API) — não precisa de container
+nem porta separados, e como está na mesma origem não precisa de CORS.
+
+Navegação por hash (`#/`, `#/search?q=...`, `#/doc/{id}`) em vez de rotas
+de servidor: o path real requisitado ao Uvicorn é sempre `/`, então
+recarregar a página numa rota profunda (`#/doc/100`) funciona sem
+precisar de fallback de SPA no `StaticFiles`.
+
 ### Rodando com Docker
 
 ```
