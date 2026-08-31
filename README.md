@@ -12,18 +12,19 @@ sistema (com exemplo prático e solução de problemas comuns) está em
 ## Requisitos
 
 - Docker + Docker Compose v2 (`docker compose`, não `docker-compose`).
-- **~15–18 GB de espaço em disco.** `processing/embedding/` e `api/`
-  compartilham uma imagem base ([`ml-base/`](ml-base/README.md), ~2,9 GB)
-  com PyTorch (build **CPU-only** — o wheel padrão do PyPI traz ~4,6 GB de
-  bibliotecas CUDA/NVIDIA não usadas, já que nenhum container aqui tem
-  GPU) + `sentence-transformers` + o modelo já baixado. Cada um dos dois
-  soma só suas próprias dependências extras em cima disso (poucos MB).
-  `crawler`/`processing/ingestion`/`database` são independentes e leves
+- **~16–19 GB de espaço em disco.** `processing/embedding/` e `api/`
+  compartilham uma imagem base ([`ml-base/`](ml-base/README.md), ~4 GB) com
+  PyTorch + `sentence-transformers` + o modelo já baixado. Por padrão é um
+  build **CPU-only** (o wheel padrão do PyPI traz ~4,6 GB de bibliotecas
+  CUDA/NVIDIA não usadas em máquinas sem GPU) — se a máquina tiver GPU
+  NVIDIA, dá pra buildar uma variante acelerada (ver `ml-base/README.md` e
+  `docker-compose.gpu.yml`). Cada um dos dois módulos soma só suas próprias
+  dependências extras em cima disso (poucos MB). `crawler`/
+  `processing/ingestion`/`database` são independentes e leves
   (200–450 MB cada).
 - Acesso à rede: `crawler` baixa de `biblioteca.cesar.school` e
   `drive.google.com`; `ml-base` baixa PyTorch, `sentence-transformers` e os
-  pesos do modelo (`paraphrase-multilingual-MiniLM-L12-v2`) durante o
-  `docker build`.
+  pesos do modelo (`BAAI/bge-m3`, ~2,2 GB) durante o `docker build`.
 - Nenhuma credencial externa necessária — tudo é público (acervo CESAR,
   Google Drive) ou local (Postgres com credenciais fixas de POC em
   `docker-compose.yml`, ver `database/README.md`).
@@ -33,8 +34,8 @@ sistema (com exemplo prático e solução de problemas comuns) está em
 | Módulo | O que faz | Tecnologia | Tipo |
 |---|---|---|---|
 | [`crawler/`](crawler/README.md) | Varre o acervo da Biblioteca CESAR por id, baixa PDF + metadados de TCCs/dissertações/teses elegíveis. | Java 25 (virtual threads) + Maven | Batch (`run --rm`) |
-| [`ml-base/`](ml-base/README.md) | Imagem base compartilhada por `processing/embedding/` e `api/` — PyTorch CPU-only + `sentence-transformers` + modelo já baixado. Não é um serviço, precisa ser buildada antes dos dois. Fica solta na raiz (não agrupada com `database/` como "infra"): é uma camada de build reaproveitada por outros módulos, `database/` é um serviço com estado de verdade — categorias diferentes, agrupar as duas só pelo "não é lógica de negócio" bagunçaria mais do que ajudaria. | — | Imagem base (`docker build`) |
-| [`processing/`](processing/README.md) | Agrupa os dois estágios de processamento de texto: [`ingestion/`](processing/ingestion/README.md) (extrai texto dos PDFs, gera chunks) e [`embedding/`](processing/embedding/README.md) (gera vetores de 384 dim por chunk). Dockerfiles/imagens separados de propósito — pesos de dependência bem diferentes. | Python 3.12 (`pypdf` / `sentence-transformers` via `ml-base/`) | Batch (`run --rm`) |
+| [`ml-base/`](ml-base/README.md) | Imagem base compartilhada por `processing/embedding/` e `api/` — PyTorch (CPU por padrão, GPU opcional) + `sentence-transformers` + modelo já baixado. Não é um serviço, precisa ser buildada antes dos dois. Fica solta na raiz (não agrupada com `database/` como "infra"): é uma camada de build reaproveitada por outros módulos, `database/` é um serviço com estado de verdade — categorias diferentes, agrupar as duas só pelo "não é lógica de negócio" bagunçaria mais do que ajudaria. | — | Imagem base (`docker build`) |
+| [`processing/`](processing/README.md) | Agrupa os dois estágios de processamento de texto: [`ingestion/`](processing/ingestion/README.md) (extrai texto dos PDFs, gera chunks) e [`embedding/`](processing/embedding/README.md) (gera vetores de 1024 dim por chunk). Dockerfiles/imagens separados de propósito — pesos de dependência bem diferentes. | Python 3.12 (`pypdf` / `sentence-transformers` via `ml-base/`) | Batch (`run --rm`) |
 | [`database/`](database/README.md) | Schema PostgreSQL/pgvector (índice HNSW) + loader idempotente dos chunks/vetores. | PostgreSQL 16 + pgvector | Serviço (`postgres`, longa duração) + loader batch |
 | [`api/`](api/README.md) | Recomenda documentos por id existente ou por busca em texto livre, via similaridade máxima entre chunks — como CLI (`python -m api.cli`), como serviço HTTP (`/search`, `/documents/{id}/recommendations`, docs em `/docs`) e como interface web simples (HTML/JS puro, sem build, servida na raiz `/` pelo mesmo processo), mesmo código pros três. | Python 3.12 + FastAPI/Uvicorn + `psycopg`/`pgvector`/`sentence-transformers` | CLI batch + serviço HTTP (longa duração) |
 
@@ -56,7 +57,8 @@ docker compose run --rm crawler --start 95 --end 105 --out /app/downloads --dela
 # 2. extrair texto e gerar chunks
 docker compose run --rm ingestion
 
-# 3. gerar embeddings (384 dim, paraphrase-multilingual-MiniLM-L12-v2)
+# 3. gerar embeddings (1024 dim, BAAI/bge-m3 — CPU por padrão; use
+#    docker-compose.gpu.yml pra acelerar com GPU NVIDIA, ver ml-base/README.md)
 docker compose run --rm embedding
 
 # 4. subir o Postgres/pgvector e carregar os dados

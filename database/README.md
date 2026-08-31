@@ -8,7 +8,7 @@ produzidos pelo `embedding/` no banco.
 - `documents` — um registro por acervo (`cod_acervo` como PK, `titulo`,
   `autor`, `tipo_obra`, `fonte_url`).
 - `chunks` — um registro por chunk (`cod_acervo` FK com `ON DELETE
-  CASCADE`, `chunk_index`, `text`, offsets, `embedding VECTOR(384)`,
+  CASCADE`, `chunk_index`, `text`, offsets, `embedding VECTOR(1024)`,
   `embedding_model`). `UNIQUE (cod_acervo, chunk_index)`.
 - Índice `hnsw` em `chunks.embedding` com `vector_cosine_ops` — busca por
   similaridade de cosseno, usada pelo `api/` na próxima etapa. HNSW

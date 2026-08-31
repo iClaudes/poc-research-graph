@@ -65,10 +65,12 @@ com aviso.
 docker compose run --rm embedding
 ```
 
-Lê `ingested/`, gera um vetor de 384 dimensões por chunk (modelo
-`paraphrase-multilingual-MiniLM-L12-v2`, roda local em CPU) e grava em
-`embedded/`. Para poucas dezenas de documentos isso leva segundos; um
-acervo grande pode levar minutos — não depende de rede, só de CPU.
+Lê `ingested/`, gera um vetor de 1024 dimensões por chunk (modelo
+`BAAI/bge-m3`, roda local em CPU por padrão — ou GPU, se buildado com o
+override `docker-compose.gpu.yml`, ver `ml-base/README.md`) e grava em
+`embedded/`. Para poucas dezenas de documentos isso leva segundos a
+minutos; um acervo grande pode levar bem mais em CPU — GPU acelera bastante
+com esse modelo.
 
 ### 4. Subir o banco e carregar os dados
 

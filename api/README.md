@@ -48,7 +48,7 @@ reduzido pela ausência de mais matches. `match_count` informa quantos
 chunks distintos (de 1 a 3) entraram nessa pontuação, pra dar transparência
 sobre a confiança do resultado.
 
-Resultados cujo melhor chunk fica abaixo de `MIN_SIMILARITY` (0.35) são
+Resultados cujo melhor chunk fica abaixo de `MIN_SIMILARITY` (0.40) são
 descartados — a API pode retornar menos que `top_n` resultados (inclusive
 lista vazia) quando não há match de qualidade, em vez de forçar
 recomendações fracas só para preencher a contagem pedida.
@@ -69,7 +69,7 @@ nenhum).
 
 ## Modelo (busca por texto livre)
 
-Mesmo modelo do `embedding/`: `paraphrase-multilingual-MiniLM-L12-v2`.
+Mesmo modelo do `embedding/`: `BAAI/bge-m3`.
 **Precisa ser o mesmo** — vetores gerados por modelos diferentes não são
 comparáveis entre si. PyTorch + `sentence-transformers` vêm da imagem base
 [`ml-base/`](../ml-base/README.md) (compartilhada com
@@ -113,6 +113,14 @@ precisar de fallback de SPA no `StaticFiles`.
 ```
 docker build -t poc-research-graph-ml-base:latest ./ml-base   # se ainda não existir
 docker compose up -d postgres api
+```
+
+Com GPU NVIDIA disponível, use o override `docker-compose.gpu.yml` (ver
+`ml-base/README.md`) pra acelerar o carregamento do modelo no startup e a
+codificação de buscas em texto livre:
+
+```
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d postgres api
 ```
 
 Requer o `postgres` com dados carregados (ver `database/README.md`).
@@ -180,39 +188,46 @@ Valem pros dois modos, já que compartilham a mesma lógica de agregação
   distintos do candidato, com zero-padding — um pico isolado passa a
   pontuar mal. Continua sem afetar a busca por texto livre (`--query`/
   `/search`, um único vetor de referência, onde o sinal já era nítido).
-- **Linguagem acadêmica genérica dominando o ranking (parcialmente
-  mitigado, limitação real e observada — não hipotética).** Ampliando o
-  corpus pra 58 documentos reais (crawler, faixa 1–600) pra validar a
-  correção acima, apareceu um problema relacionado e mais sério: como
-  **todos** os chunks do documento de referência viram vetor de busca
-  (inclusive os de metodologia), muitos candidatos conseguem `match_count`
-  máximo só por compartilharem o "sotaque" acadêmico comum ao corpus, não o
-  tema. No teste com o acervo 96, o top-8 inteiro veio com `match_count: 3`
-  e similaridade ~0.92–0.95, mas nenhum resultado era sobre visão
-  computacional ou agricultura. Mitigação aplicada (ver "Algoritmo" acima):
-  descartar vetores de referência cujos 20 vizinhos mais próximos caem
-  espalhados por documentos demais (`DIVERSITY_THRESHOLD`). Resultado
-  **real, mas parcial**: com o filtro, os acervos 69 ("visão computacional
-  para reconhecimento de abelhas e vespas") e 59 ("visão computacional
-  resiliente a ataques adversariais") — matches genuinamente temáticos —
-  passaram a aparecer no top-8 do acervo 96, onde antes não apareciam
-  nenhum; mas ainda misturados com resultados sem relação de tema, não
-  claramente no topo do ranking. `DIVERSITY_THRESHOLD = 0.5` foi escolhido
-  testando 0.75/0.5/0.35 nesse mesmo caso (96) — **calibração em cima de um
-  único exemplo, não validada contra um conjunto de teste maior**, então é
-  o palpite mais informado disponível, não um valor definitivo. Causa raiz
-  provável: `paraphrase-multilingual-MiniLM-L12-v2` é um modelo leve
-  (bom custo/benefício em CPU, mas limitado) e, em chunks de ~1000
-  caracteres de português acadêmico, o vocabulário estrutural de pesquisa
-  (metodologia, discussão, referencial teórico) pesa mais no embedding do
-  que o vocabulário específico do tema — ver opção "trocar o modelo de
-  embedding" no `ROADMAP.md`, provavelmente a correção mais efetiva daqui
-  pra frente, mas fora de escopo por ora (reprocessar todo o corpus).
-- Piso mínimo de similaridade (`MIN_SIMILARITY = 0.35` em `search.py`):
+- **Linguagem acadêmica genérica dominando o ranking** — **melhorado
+  substancialmente pela troca de modelo de embedding**. Com o modelo
+  original (`paraphrase-multilingual-MiniLM-L12-v2`, treinado pra
+  "paraphrase mining", não retrieval), o teste com o acervo 96 (visão
+  computacional/cana-de-açúcar) retornava um top-8 inteiro com
+  `match_count: 3` e similaridade ~0.92–0.95, mas nenhum resultado
+  genuinamente sobre o tema — só linguagem de metodologia compartilhada
+  com o corpus inteiro. O filtro de vetor de referência genérico
+  (`DIVERSITY_THRESHOLD`, ver "Algoritmo" acima) melhorou isso de forma
+  real mas parcial: 2 documentos temáticos passaram a aparecer, só que
+  nas posições 5 e 8, ainda misturados com ruído.
+
+  Trocando o modelo pra `BAAI/bge-m3` (treinado especificamente pra
+  recuperação/busca) **e mantendo o mesmo filtro de diversidade**, o
+  resultado do mesmo teste (acervo 96) mudou de forma marcante: o acervo
+  69 ("visão computacional para reconhecimento de abelhas e vespas") foi
+  pra **1ª posição** (era 5ª) e o acervo 59 ("visão computacional
+  resiliente a ataques adversariais") pra **3ª** (era 8ª). Similaridades
+  também ficaram bem mais espalhadas (0.69–0.86, contra 0.88–0.95 antes)
+  — sinal de discriminação real, não só agrupamento por registro de
+  escrita. O filtro de diversidade continua relevante nesse modelo (ainda
+  descarta ~48% dos vetores de referência do acervo 96, contra ~64% antes)
+  — não ficou redundante, os dois mecanismos se complementam. Ainda não é
+  perfeito: metade do top-8 (posições 2, 4-6) são papers de ML aplicado a
+  outros domínios (áudio, séries temporais, futebol), plausíveis como
+  vizinhos temáticos de "aplicar deep learning pra classificação/predição"
+  mas não sobre visão computacional/agricultura especificamente — dado o
+  corpus (58 documentos, crawler sequencial, sem curadoria por tema) ter
+  poucos documentos genuinamente próximos do tema do acervo 96.
+- Piso mínimo de similaridade (`MIN_SIMILARITY = 0.40` em `search.py`):
   descarta candidatos cujo melhor chunk fica abaixo disso, em vez de forçar
-  `top_n` resultados mesmo sem nenhum match de qualidade. Valor inicial por
-  julgamento, não calibrado estatisticamente — ajustar se o teste manual
-  mostrar resultados bons sendo descartados ou ruins passando.
+  `top_n` resultados mesmo sem nenhum match de qualidade. Recalibrado após
+  a troca de modelo — a escala de similaridade do `bge-m3` é diferente da
+  do modelo anterior (matches bons ficam na faixa 0.59–0.86, não 0.85+
+  como antes). Testado com uma busca claramente fora do domínio ("receita
+  de bolo de chocolate"): antes da recalibração (piso 0.35) retornava 5
+  resultados sem relação nenhuma, todos na faixa 0.36–0.39; com o piso em
+  0.40 retorna lista vazia, como esperado. Ainda um valor por julgamento
+  (não calibrado estatisticamente contra um conjunto de teste maior) —
+  ajustar se aparecerem falsos negativos/positivos no uso real.
 
 ## Como testar
 
@@ -225,12 +240,12 @@ Valem pros dois modos, já que compartilham a mesma lógica de agregação
    `match_count` na saída: um candidato com `match_count` baixo (1) e
    `similarity` alta isolada deve perder posição pra um com `match_count`
    maior (2-3) e similaridades mais consistentes. Testado num corpus de 58
-   documentos (crawler, faixa 1–600): os acervos 69 ("visão computacional
-   para reconhecimento de abelhas e vespas") e 59 ("visão computacional
-   resiliente a ataques adversariais") devem aparecer no top-8 — matches
-   genuinamente temáticos que só passaram a aparecer depois do filtro de
-   vetor de referência genérico (ver "Limitações conhecidas": mitigação
-   real mas parcial, ainda misturado com resultados sem relação de tema).
+   documentos (crawler, faixa 1–600) com `bge-m3`: o acervo 69 ("visão
+   computacional para reconhecimento de abelhas e vespas") deve ficar em
+   1º lugar e o acervo 59 ("visão computacional resiliente a ataques
+   adversariais") no top-3 — matches genuinamente temáticos (ver
+   "Limitações conhecidas" pro resultado completo e o que ainda fica
+   parcial).
    `docker compose run --rm api python -m api.cli --query "design de interfaces para aplicativos de streaming"`
    — esperado: documentos de "design" rankeados acima dos demais (regressão:
    resultado deve ser igual ao de antes da mudança, já que a busca em texto

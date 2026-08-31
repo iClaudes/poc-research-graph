@@ -11,7 +11,7 @@ a compartilhar uma imagem faria `ingestion/` herdar peso que não usa.
 - [`ingestion/`](ingestion/README.md) — extrai texto dos PDFs baixados pelo
   `crawler/`, remove cabeçalho/rodapé repetido, gera chunks de tamanho
   fixo.
-- [`embedding/`](embedding/README.md) — gera um vetor de 384 dimensões por
+- [`embedding/`](embedding/README.md) — gera um vetor de 1024 dimensões por
   chunk com um modelo local multilíngue.
 
 Os diretórios de entrada/saída (`downloads/`, `ingested/`, `embedded/`)
