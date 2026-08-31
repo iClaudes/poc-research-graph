@@ -1,0 +1,36 @@
+# Override opcional para habilitar aceleração por GPU NVIDIA nos serviços
+# que usam PyTorch/sentence-transformers. Uso:
+#
+#   docker build -t poc-research-graph-ml-base:gpu \
+#     --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cu124 \
+#     ./ml-base
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml build embedding api
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml run --rm embedding
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d api
+#
+# Sem esse arquivo, tudo continua CPU-only (padrão, sem exigir GPU/driver
+# NVIDIA) — ver ml-base/README.md.
+services:
+  embedding:
+    build:
+      args:
+        ML_BASE_TAG: gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  api:
+    build:
+      args:
+        ML_BASE_TAG: gpu
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
