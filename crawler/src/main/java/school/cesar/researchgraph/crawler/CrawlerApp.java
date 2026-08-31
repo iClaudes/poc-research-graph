@@ -17,18 +17,29 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Varre uma faixa de IDs do acervo da Biblioteca CESAR, identifica teses/TCCs
  * com PDF disponível (hospedado no Google Drive) e baixa o PDF junto com um
  * sidecar de metadados em JSON.
  *
- * <p>Uso: {@code java -jar crawler.jar --start 1 --end 500 --out ./downloads [--delay-ms 500]}
+ * <p>Cada ID é processado numa virtual thread própria (I/O-bound: é tudo
+ * espera de rede), com o grau de paralelismo real limitado por um semáforo
+ * ({@code --concurrency}) — paraleliza a espera de rede sem virar uma
+ * varredura "o mais rápido possível" contra um servidor de terceiro que não
+ * documenta nem garante limites de taxa.
+ *
+ * <p>Uso: {@code java -jar crawler.jar --start 1 --end 500 --out ./downloads [--delay-ms 500] [--concurrency 4]}
  */
 public final class CrawlerApp {
 
     private static final Logger log = LoggerFactory.getLogger(CrawlerApp.class);
     private static final long DEFAULT_DELAY_MS = 500;
+    private static final int DEFAULT_CONCURRENCY = 4;
 
     public static void main(String[] args) throws Exception {
         CliArgs cli = CliArgs.parse(args);
@@ -46,23 +57,34 @@ public final class CrawlerApp {
         Files.createDirectories(outDir);
 
         Summary summary = new Summary();
+        Semaphore concurrencyLimit = new Semaphore(cli.concurrency);
 
-        for (int id = cli.start; id <= cli.end; id++) {
-            summary.scanned++;
-            try {
-                processarRegistro(id, client, downloader, outDir, objectMapper, summary);
-            } catch (Exception e) {
-                summary.erros++;
-                log.error("acervo {} -> erro: {}", id, e.getMessage());
+        try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int id = cli.start; id <= cli.end; id++) {
+                int currentId = id;
+                concurrencyLimit.acquire();
+                executor.submit(() -> {
+                    try {
+                        summary.scanned.incrementAndGet();
+                        try {
+                            processarRegistro(currentId, client, downloader, outDir, objectMapper, summary);
+                        } catch (Exception e) {
+                            summary.erros.incrementAndGet();
+                            log.error("acervo {} -> erro: {}", currentId, e.getMessage());
+                        }
+                        Thread.sleep(cli.delayMs);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        concurrencyLimit.release();
+                    }
+                });
             }
-
-            if (id < cli.end) {
-                Thread.sleep(cli.delayMs);
-            }
-        }
+        } // fecha o executor e aguarda todas as virtual threads terminarem
 
         log.info("Resumo: varridos={} 404={} pulados={} baixados={} erros={}",
-                summary.scanned, summary.notFound, summary.skipped, summary.downloaded, summary.erros);
+                summary.scanned.get(), summary.notFound.get(), summary.skipped.get(),
+                summary.downloaded.get(), summary.erros.get());
     }
 
     private static void processarRegistro(int id, CesarLibraryClient client, GoogleDriveDownloader downloader,
@@ -70,7 +92,7 @@ public final class CrawlerApp {
             throws IOException, InterruptedException {
         Optional<AcervoRecord> maybeRecord = client.buscar(id);
         if (maybeRecord.isEmpty()) {
-            summary.notFound++;
+            summary.notFound.incrementAndGet();
             log.info("acervo {} -> 404, pulando", id);
             return;
         }
@@ -79,14 +101,14 @@ public final class CrawlerApp {
         Optional<String> pdfUrl = record.pdfDownloadUrl();
 
         if (!record.isTeseOuTcc() || pdfUrl.isEmpty()) {
-            summary.skipped++;
+            summary.skipped.incrementAndGet();
             log.info("acervo {} -> tipo '{}' sem PDF elegível, pulando", id, record.tipoObra());
             return;
         }
 
         Optional<String> fileId = downloader.extractFileId(pdfUrl.get());
         if (fileId.isEmpty()) {
-            summary.skipped++;
+            summary.skipped.incrementAndGet();
             log.warn("acervo {} -> link '{}' não é um link de compartilhamento do Drive reconhecido, pulando",
                     id, pdfUrl.get());
             return;
@@ -109,16 +131,16 @@ public final class CrawlerApp {
         Path metadataPath = outDir.resolve(id + ".json");
         objectMapper.writeValue(metadataPath.toFile(), metadata);
 
-        summary.downloaded++;
+        summary.downloaded.incrementAndGet();
         log.info("acervo {} -> baixado ({} bytes): {}", id, pdfBytes.length, record.titulo());
     }
 
     private static final class Summary {
-        int scanned;
-        int notFound;
-        int skipped;
-        int downloaded;
-        int erros;
+        final AtomicInteger scanned = new AtomicInteger();
+        final AtomicInteger notFound = new AtomicInteger();
+        final AtomicInteger skipped = new AtomicInteger();
+        final AtomicInteger downloaded = new AtomicInteger();
+        final AtomicInteger erros = new AtomicInteger();
     }
 
     private static final class CliArgs {
@@ -126,12 +148,14 @@ public final class CrawlerApp {
         final int end;
         final String outDir;
         final long delayMs;
+        final int concurrency;
 
-        private CliArgs(int start, int end, String outDir, long delayMs) {
+        private CliArgs(int start, int end, String outDir, long delayMs, int concurrency) {
             this.start = start;
             this.end = end;
             this.outDir = outDir;
             this.delayMs = delayMs;
+            this.concurrency = concurrency;
         }
 
         static CliArgs parse(String[] args) {
@@ -139,6 +163,7 @@ public final class CrawlerApp {
             Integer end = null;
             String outDir = "./downloads";
             long delayMs = DEFAULT_DELAY_MS;
+            int concurrency = DEFAULT_CONCURRENCY;
 
             for (int i = 0; i < args.length; i++) {
                 switch (args[i]) {
@@ -146,19 +171,23 @@ public final class CrawlerApp {
                     case "--end" -> end = Integer.parseInt(args[++i]);
                     case "--out" -> outDir = args[++i];
                     case "--delay-ms" -> delayMs = Long.parseLong(args[++i]);
+                    case "--concurrency" -> concurrency = Integer.parseInt(args[++i]);
                     default -> throw new IllegalArgumentException("Argumento desconhecido: " + args[i]);
                 }
             }
 
             if (start == null || end == null) {
                 throw new IllegalArgumentException(
-                        "Uso: --start <id> --end <id> [--out <dir>] [--delay-ms <ms>]");
+                        "Uso: --start <id> --end <id> [--out <dir>] [--delay-ms <ms>] [--concurrency <n>]");
             }
             if (start > end) {
                 throw new IllegalArgumentException("--start deve ser <= --end");
             }
+            if (concurrency < 1) {
+                throw new IllegalArgumentException("--concurrency deve ser >= 1");
+            }
 
-            return new CliArgs(start, end, outDir, delayMs);
+            return new CliArgs(start, end, outDir, delayMs, concurrency);
         }
     }
 }
