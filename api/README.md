@@ -18,8 +18,7 @@ igual às outras ferramentas batch do repositório.
 ## Algoritmo
 
 Um documento é relevante se **algum** chunk dele for muito parecido com
-**algum** chunk do documento/busca de referência — a agregação usa
-**similaridade máxima** por documento candidato, não a média de todos os
+**algum** chunk do documento/busca de referência, não a média de todos os
 chunks. Isso importa porque o teste de sanidade do `embedding/` mostrou que
 o centróide de um documento inteiro dilui o sinal temático (muito
 vocabulário estrutural acadêmico — metodologia, referências, cabeçalhos —
@@ -27,10 +26,46 @@ compartilhado entre todos os TCCs/teses).
 
 Para cada vetor de referência, roda uma busca KNN via pgvector (usa o
 índice HNSW), pega os 20 chunks mais próximos, e por documento candidato
-guarda a menor distância (= maior similaridade) encontrada. Se o documento
-de referência tiver muitos chunks, usa uma amostra de até 150 (espaçados
-uniformemente) como vetores de referência, para não gerar centenas de
-consultas ao banco por chamada.
+guarda a melhor similaridade encontrada **para cada chunk-alvo distinto**
+(um mesmo chunk do candidato pode aparecer nos resultados de várias buscas,
+uma por vetor de referência). Se o documento de referência tiver muitos
+chunks, usa uma amostra de até 150 (espaçados uniformemente) como vetores
+de referência, para não gerar centenas de consultas ao banco por chamada.
+
+**Ranqueamento por múltiplos chunks (não só o pico).** A pontuação usada
+pra ordenar os candidatos é a média dos `TOP_K_CHUNKS` (3) chunks-alvo
+distintos de maior similaridade, com zero-padding se o candidato tiver
+menos que isso — ou seja, um documento precisa de **várias partes**
+realmente parecidas com a referência pra pontuar bem, um único chunk
+isolado não basta. No modo de busca em texto livre (`--query`/`/search`),
+que usa um único vetor de referência, isso equivale ao comportamento
+anterior (só o melhor chunk importa) — não há vetores extras pra formar um
+pico espúrio nesse modo, então nada muda ali. Essa é a correção do "viés de
+tamanho" descrito abaixo. O campo `similarity` retornado continua sendo o
+valor do melhor chunk isolado (não a média com zero-padding) — é o número
+mostrado ao usuário, e teria pouco significado como um valor artificialmente
+reduzido pela ausência de mais matches. `match_count` informa quantos
+chunks distintos (de 1 a 3) entraram nessa pontuação, pra dar transparência
+sobre a confiança do resultado.
+
+Resultados cujo melhor chunk fica abaixo de `MIN_SIMILARITY` (0.35) são
+descartados — a API pode retornar menos que `top_n` resultados (inclusive
+lista vazia) quando não há match de qualidade, em vez de forçar
+recomendações fracas só para preencher a contagem pedida.
+
+**Filtro de vetor de referência genérico (mitigação parcial, ver
+"Limitações conhecidas").** Testado com um corpus maior (58 documentos, ver
+histórico do repositório), ficou claro que nem todo chunk do documento de
+referência carrega sinal temático — trechos de metodologia acadêmica
+("abordagem qualitativa e quantitativa...") se repetem quase iguais em
+quase toda tese/TCC em português. Antes de aceitar os resultados de um
+vetor de referência (modo por documento, vários vetores), checamos em
+quantos documentos **distintos** os 20 vizinhos mais próximos daquele vetor
+caem — se `>= DIVERSITY_THRESHOLD` (0.5) do total, é sinal de linguagem
+genérica batendo um pouco em quase tudo, e descartamos esse vetor de
+referência inteiro (não conta pra nenhum candidato). Não se aplica à busca
+em texto livre (1 vetor só — descartá-lo deixaria a busca sem resultado
+nenhum).
 
 ## Modelo (busca por texto livre)
 
@@ -50,8 +85,11 @@ README).
 - `GET /documents/{cod_acervo}` — detalhe de um documento (`404` se não
   existir).
 - `GET /documents/{cod_acervo}/recommendations?top_n=5` — documentos mais
-  parecidos com esse (`404` se o documento não existir).
-- `GET /search?q=texto+livre&top_n=5` — busca semântica em texto livre.
+  parecidos com esse (`404` se o documento não existir; pode retornar menos
+  que `top_n`, inclusive lista vazia, se não houver match acima do piso
+  mínimo de similaridade).
+- `GET /search?q=texto+livre&top_n=5` — busca semântica em texto livre (mesma
+  regra de piso mínimo).
 
 Documentação interativa (Swagger UI) em `/docs`.
 
@@ -129,36 +167,74 @@ Valem pros dois modos, já que compartilham a mesma lógica de agregação
 (`search.recommend`):
 
 - **Viés de tamanho na recomendação por documento** (`--cod-acervo` /
-  `/documents/{id}/recommendations`). A agregação por similaridade máxima
-  favorece documentos candidatos com muitos chunks: quanto mais chunks um
-  candidato tem, mais chances estatísticas de um deles gerar um match alto
-  por acaso (ex. trechos de metodologia/referências genéricos), mesmo sem
-  relação temática real. Observado no teste manual: recomendando a partir
-  do acervo 96 (visão computacional/cana-de-açúcar, sem nenhum documento
-  genuinamente relacionado nos 8 testados), o acervo 102 (tese de 722
-  chunks) ficou em 1º lugar com um match cujo trecho era só linguagem
-  acadêmica genérica — não um match temático de verdade. Já na busca por
-  texto livre (`--query`/`/search`, um único vetor de referência, sem esse
-  efeito de escala), o sinal foi bem mais nítido (ex. busca por
-  "streaming"/design retornou o documento certo com folga). Mitigação
-  futura possível: normalizar por `log(chunk_count)` ou exigir múltiplos
-  chunks acima de um limiar em vez de aceitar um único pico.
-- Recomendação por documento com poucos documentos genuinamente
-  relacionados no banco (como no lote de teste de 8 documentos) não tem
-  como validar qualidade de recomendação de forma robusta — o teste manual
-  confere comportamento (não recomenda a si mesmo, não quebra), não
-  precisão.
+  `/documents/{id}/recommendations`) — **mitigado**. Com agregação por
+  similaridade máxima pura, documentos candidatos com muitos chunks tinham
+  vantagem estatística: quanto mais chunks um candidato tem, mais chances de
+  um deles gerar um match alto por acaso (ex. trechos de
+  metodologia/referências genéricos), mesmo sem relação temática real.
+  Observado no teste manual original (corpus de 8 documentos): recomendando
+  a partir do acervo 96 (visão computacional/cana-de-açúcar), o acervo 102
+  (tese de 722 chunks) ficou em 1º lugar com um match cujo trecho era só
+  linguagem acadêmica genérica. A mitigação aplicada (ver "Algoritmo"
+  acima): ranquear pela média dos `TOP_K_CHUNKS` (3) melhores chunks
+  distintos do candidato, com zero-padding — um pico isolado passa a
+  pontuar mal. Continua sem afetar a busca por texto livre (`--query`/
+  `/search`, um único vetor de referência, onde o sinal já era nítido).
+- **Linguagem acadêmica genérica dominando o ranking (parcialmente
+  mitigado, limitação real e observada — não hipotética).** Ampliando o
+  corpus pra 58 documentos reais (crawler, faixa 1–600) pra validar a
+  correção acima, apareceu um problema relacionado e mais sério: como
+  **todos** os chunks do documento de referência viram vetor de busca
+  (inclusive os de metodologia), muitos candidatos conseguem `match_count`
+  máximo só por compartilharem o "sotaque" acadêmico comum ao corpus, não o
+  tema. No teste com o acervo 96, o top-8 inteiro veio com `match_count: 3`
+  e similaridade ~0.92–0.95, mas nenhum resultado era sobre visão
+  computacional ou agricultura. Mitigação aplicada (ver "Algoritmo" acima):
+  descartar vetores de referência cujos 20 vizinhos mais próximos caem
+  espalhados por documentos demais (`DIVERSITY_THRESHOLD`). Resultado
+  **real, mas parcial**: com o filtro, os acervos 69 ("visão computacional
+  para reconhecimento de abelhas e vespas") e 59 ("visão computacional
+  resiliente a ataques adversariais") — matches genuinamente temáticos —
+  passaram a aparecer no top-8 do acervo 96, onde antes não apareciam
+  nenhum; mas ainda misturados com resultados sem relação de tema, não
+  claramente no topo do ranking. `DIVERSITY_THRESHOLD = 0.5` foi escolhido
+  testando 0.75/0.5/0.35 nesse mesmo caso (96) — **calibração em cima de um
+  único exemplo, não validada contra um conjunto de teste maior**, então é
+  o palpite mais informado disponível, não um valor definitivo. Causa raiz
+  provável: `paraphrase-multilingual-MiniLM-L12-v2` é um modelo leve
+  (bom custo/benefício em CPU, mas limitado) e, em chunks de ~1000
+  caracteres de português acadêmico, o vocabulário estrutural de pesquisa
+  (metodologia, discussão, referencial teórico) pesa mais no embedding do
+  que o vocabulário específico do tema — ver opção "trocar o modelo de
+  embedding" no `ROADMAP.md`, provavelmente a correção mais efetiva daqui
+  pra frente, mas fora de escopo por ora (reprocessar todo o corpus).
+- Piso mínimo de similaridade (`MIN_SIMILARITY = 0.35` em `search.py`):
+  descarta candidatos cujo melhor chunk fica abaixo disso, em vez de forçar
+  `top_n` resultados mesmo sem nenhum match de qualidade. Valor inicial por
+  julgamento, não calibrado estatisticamente — ajustar se o teste manual
+  mostrar resultados bons sendo descartados ou ruins passando.
 
 ## Como testar
 
 1. Ter o pipeline completo rodando (`crawler` → `processing/ingestion` →
    `processing/embedding` → `db-loader`, ver READMEs respectivos).
 2. **CLI**: `docker compose run --rm api python -m api.cli --cod-acervo 96`
-   (documento sobre visão computacional em cana-de-açúcar — o mais atípico
-   do lote de teste no `embedding/`). Confirmar que ele mesmo não aparece
-   nos resultados.
+   (documento sobre visão computacional em cana-de-açúcar). Confirmar que
+   ele mesmo não aparece nos resultados, e que o acervo 102 (tese de 722
+   chunks) não domina mais o topo por um match isolado — conferir
+   `match_count` na saída: um candidato com `match_count` baixo (1) e
+   `similarity` alta isolada deve perder posição pra um com `match_count`
+   maior (2-3) e similaridades mais consistentes. Testado num corpus de 58
+   documentos (crawler, faixa 1–600): os acervos 69 ("visão computacional
+   para reconhecimento de abelhas e vespas") e 59 ("visão computacional
+   resiliente a ataques adversariais") devem aparecer no top-8 — matches
+   genuinamente temáticos que só passaram a aparecer depois do filtro de
+   vetor de referência genérico (ver "Limitações conhecidas": mitigação
+   real mas parcial, ainda misturado com resultados sem relação de tema).
    `docker compose run --rm api python -m api.cli --query "design de interfaces para aplicativos de streaming"`
-   — esperado: documentos de "design" rankeados acima dos demais.
+   — esperado: documentos de "design" rankeados acima dos demais (regressão:
+   resultado deve ser igual ao de antes da mudança, já que a busca em texto
+   livre usa `k_effective=1`).
    `docker compose run --rm api python -m api.cli --cod-acervo 99999` (id
    inexistente) — deve logar erro claro e sair com código de erro, sem
    stack trace não tratada.
@@ -166,7 +242,12 @@ Valem pros dois modos, já que compartilham a mesma lógica de agregação
    de rotas e conferir: `/health` responde ok; `/documents` lista os
    documentos carregados; `/documents/{id}` inexistente retorna `404`;
    `/search` e `/recommendations` retornam os mesmos resultados já
-   validados via CLI.
+   validados via CLI, incluindo o campo `match_count`; uma busca sem nenhum
+   match de qualidade (`q` fora do domínio do acervo) retorna lista menor
+   que `top_n` (ou vazia) em vez de forçar resultados fracos.
 4. Conferir latência consistente entre a primeira e as próximas chamadas a
    `/search` (confirma que o modelo carrega uma vez no startup, não a cada
    requisição).
+5. **UI web**: abrir `http://localhost:8000/`, fazer uma busca e abrir o
+   detalhe de um documento — conferir que o badge "N trechos parecidos"
+   aparece ao lado do badge de similaridade nos cards de resultado.

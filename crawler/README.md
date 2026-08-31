@@ -44,13 +44,25 @@ Gera `target/crawler-0.1.0.jar` (fat jar via shade plugin).
 ## Uso
 
 ```
-java -jar target/crawler-0.1.0.jar --start 1 --end 500 --out ./downloads [--delay-ms 500]
+java -jar target/crawler-0.1.0.jar --start 1 --end 500 --out ./downloads [--delay-ms 500] [--concurrency 4]
 ```
 
 - `--start` / `--end`: faixa de IDs do acervo a varrer (obrigatório).
 - `--out`: diretório de saída (padrão `./downloads`).
-- `--delay-ms`: pausa entre requisições, em ms (padrão `500`) — por educação
-  com o servidor.
+- `--delay-ms`: pausa aplicada por ID processado antes de liberar sua vaga de
+  concorrência, em ms (padrão `500`) — por educação com o servidor.
+- `--concurrency`: quantos IDs processar em paralelo (padrão `4`). Cada ID
+  roda numa virtual thread própria (Java 25/Project Loom — a varredura é
+  I/O-bound, é tudo espera de rede), mas o paralelismo real fica limitado por
+  um semáforo nesse valor, pra não virar uma varredura "o mais rápido
+  possível" contra um servidor de terceiro sem SLA documentado. Taxa efetiva
+  aproximada: `concurrency / delay-ms` requisições por segundo (padrão:
+  ~8 req/s). Aumentar com cautela.
+
+Cada requisição HTTP (busca de metadados e download do Drive) tenta até 3
+vezes com backoff crescente em caso de falha de rede ou HTTP 5xx
+(`RetryingHttp`), já que uma falha isolada não deveria descartar um ID
+inteiro da varredura.
 
 Para cada ID na faixa que for Tese/Dissertação/TCC com PDF disponível, gera:
 
@@ -142,16 +154,20 @@ Verificado manualmente:
 
 ## Limitações conhecidas
 
-- **Descoberta por varredura de ID sequencial.** É simples e já validada,
-  mas gera muitas chamadas "vazias" (404 ou tipo não elegível). A API tem um
-  endpoint de busca (`/api/consulta`, parâmetro `termo_pesquisa`) que
-  poderia substituir isso por uma descoberta mais direcionada — os
-  parâmetros exatos de filtro por tipo de obra não foram confirmados.
+- **Descoberta por varredura de ID sequencial.** Continua sendo faixa de IDs
+  (`--start`/`--end`), mesmo com a paralelização via virtual threads — o que
+  melhorou foi a *taxa de varredura* (chamadas "vazias" de 404/tipo não
+  elegível agora rodam em paralelo, não uma de cada vez), não o método de
+  descoberta em si. A API tem um endpoint de busca (`/api/consulta`,
+  parâmetro `termo_pesquisa`) que poderia substituir isso por uma descoberta
+  mais direcionada — os parâmetros exatos de filtro por tipo de obra não
+  foram confirmados.
 - **Arquivos grandes no Google Drive.** Para arquivos acima do limite de
   verificação de vírus do Drive (na prática, dezenas de MB), o Drive
   costuma devolver uma página HTML de confirmação em vez do arquivo. Há um
   fallback em `GoogleDriveDownloader` que tenta extrair o token `confirm=`
-  dessa página e refazer a requisição, mas esse caminho é best-effort — não
+  dessa página e refazer a requisição (revalidando que a resposta não
+  continua em HTML depois do retry), mas esse caminho é best-effort — não
   foi validado contra um arquivo real que disparasse esse comportamento
   nesta sessão (os arquivos testados, de ~1MB a ~57MB, baixaram direto sem
   interstitial).
