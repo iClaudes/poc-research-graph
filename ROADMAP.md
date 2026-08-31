@@ -13,7 +13,7 @@ PostgreSQL/pgvector → Recomendação**. Para o que já foi feito e testado, ve
 
 | Módulo | Status | Tecnologia | Por quê |
 |---|---|---|---|
-| `crawler/` | ✅ feito e testado | Java 17 + Maven | Só HTTP + JSON, sem necessidade de ecossistema de ML; time já conhece Java; nada no mercado obriga trocar aqui. |
+| `crawler/` | ✅ feito e testado | Java 25 (virtual threads) + Maven | Só HTTP + JSON, sem necessidade de ecossistema de ML; time já conhece Java; nada no mercado obriga trocar aqui. Virtual threads (estáveis desde o 21, 25 é a LTS atual) paralelizam a espera de rede — I/O-bound, um ID por thread — sem o custo de threads de SO; concorrência real segue limitada por semáforo (`--concurrency`), não "o mais rápido possível". |
 | `processing/ingestion/` | ✅ feito e testado | Python 3.12 + `pypdf` | Extrair texto dos PDFs baixados, normalizar e gerar chunks de tamanho fixo prontos pra embedding. |
 | `processing/embedding/` | ✅ feito e testado | Python 3.12 + `sentence-transformers` | Modelo local `paraphrase-multilingual-MiniLM-L12-v2` (multilíngue, bom em português, roda em CPU) — **vetores de 384 dimensões**, valor a usar no schema pgvector do `database/`. |
 | `database/` | ✅ feito e testado | PostgreSQL 16 + pgvector (índice HNSW) | Mantido da ideia original — compete de igual pra igual com bancos vetoriais dedicados em escala de POC/médio porte, e mantém dados relacionais (metadados, grafo de relações) junto com os vetores. |
@@ -51,10 +51,43 @@ abaixo pra melhorias incrementais sobre o que já existe.
 - Fallback de download de arquivo grande no Google Drive (página de aviso de
   vírus) ainda não foi validado contra um arquivo real que dispare esse
   comportamento.
-- Viés de tamanho na recomendação por documento (`api/` — modo
-  `--cod-acervo`/`/recommendations`): documentos com muitos chunks têm
-  vantagem estatística na agregação por similaridade máxima, mesmo sem
-  relação temática real — ver limitações em `api/README.md`. Vale
-  revisitar quando houver um corpus maior pra validar com mais confiança
-  (o lote de 8 documentos testado não tem documentos genuinamente
-  relacionados entre si pra maioria dos temas).
+- ~~Viés de tamanho na recomendação por documento~~ — **mitigado e
+  validado**: `api/` passou a ranquear pela média dos `TOP_K_CHUNKS` (3)
+  melhores chunks distintos por candidato (com zero-padding), em vez de só
+  o pico máximo — ver "Algoritmo" e "Limitações conhecidas" em
+  `api/README.md`. Validado no corpus ampliado (item abaixo, já feito).
+- **Linguagem acadêmica genérica dominando o ranking** — **parcialmente
+  mitigado, não resolvido**. Ao ampliar o corpus pra validar o item acima,
+  apareceu um problema mais sério: candidatos conseguem match alto só por
+  compartilharem o "sotaque" de metodologia acadêmica com o documento de
+  referência, não o tema (ex. acervo 96 recomendando 8 documentos sem
+  nenhuma relação temática real, todos com match_count máximo). Mitigação
+  aplicada: descartar vetores de referência cujos vizinhos mais próximos
+  caem espalhados por documentos demais (`DIVERSITY_THRESHOLD` em
+  `search.py`) — melhorou de forma real e mensurável (matches
+  genuinamente temáticos passaram a aparecer), mas não limpou o ranking
+  (ainda misturado com ruído, não no topo). Ver detalhe e números em
+  "Limitações conhecidas" no `api/README.md`. Causa raiz provável: o
+  modelo de embedding atual não separa bem vocabulário de pesquisa
+  (comum a todo TCC/tese) de vocabulário de tema, em chunks curtos de
+  português acadêmico — ver "trocar o modelo de embedding" abaixo,
+  provavelmente a correção mais efetiva daqui pra frente.
+- ~~Ampliar o corpus de teste~~ — **feito**: crawler rodado até a faixa
+  1–600 (58 documentos com PDF elegível carregados no banco), o suficiente
+  pra revelar o item acima, que o lote original de 8 documentos não deixava
+  aparecer.
+- Outras melhorias de recomendação discutidas e deixadas de fora por ora,
+  em ordem crescente de esforço/risco:
+  - Reranking por metadado (mesmo `tipo_obra`/autor) como critério de
+    desempate — risco de viés introduzido com um corpus pequeno.
+  - **Trocar o modelo de embedding por um mais robusto** — com a evidência
+    do item acima, esse é agora o candidato mais forte a próxima melhoria
+    de recomendação: o `paraphrase-multilingual-MiniLM-L12-v2` atual é leve
+    (bom custo/benefício em CPU) mas parece não separar bem vocabulário de
+    pesquisa de vocabulário de tema. Custo: reprocessar todos os chunks
+    (`processing/embedding/` + `db-loader`), download e CPU maiores.
+  - Ajustar `chunk_size`/`chunk_overlap` da ingestão — exige reprocessar
+    tudo, sem evidência ainda de que o chunking atual seja o gargalo
+    (o problema observado parece mais de modelo que de tamanho de chunk).
+  - Busca híbrida (léxica + vetorial) — mais complexo, provavelmente
+    overkill pro estágio atual da POC.

@@ -12,6 +12,12 @@ function docMeta(doc) {
   return parts.join(" · ");
 }
 
+function matchCountBadge(r) {
+  if (r.match_count == null) return "";
+  const label = r.match_count === 1 ? "1 trecho parecido" : `${r.match_count} trechos parecidos`;
+  return `<span class="match-count-badge">${label}</span>`;
+}
+
 function renderError(message) {
   document.getElementById("content").innerHTML = `<div class="error">${escapeHtml(message)}</div>`;
 }
@@ -55,7 +61,7 @@ function renderSearchResults(results, q) {
     .map(
       (r) => `
     <a class="card" href="#/doc/${r.cod_acervo}">
-      <h3>${escapeHtml(r.titulo) || "(sem título)"}<span class="similarity-badge">${(r.similarity * 100).toFixed(1)}%</span></h3>
+      <h3>${escapeHtml(r.titulo) || "(sem título)"}<span class="similarity-badge">${(r.similarity * 100).toFixed(1)}%</span>${matchCountBadge(r)}</h3>
       <div class="meta">${docMeta(r)}</div>
       <div class="snippet">${escapeHtml(r.snippet)}</div>
     </a>`
@@ -69,7 +75,7 @@ function renderDocumentDetail(doc, recommendations) {
     .map(
       (r) => `
     <a class="card" href="#/doc/${r.cod_acervo}">
-      <h3>${escapeHtml(r.titulo) || "(sem título)"}<span class="similarity-badge">${(r.similarity * 100).toFixed(1)}%</span></h3>
+      <h3>${escapeHtml(r.titulo) || "(sem título)"}<span class="similarity-badge">${(r.similarity * 100).toFixed(1)}%</span>${matchCountBadge(r)}</h3>
       <div class="meta">${docMeta(r)}</div>
       <div class="snippet">${escapeHtml(r.snippet)}</div>
     </a>`

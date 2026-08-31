@@ -13,6 +13,7 @@ class Document(BaseModel):
 class Recommendation(BaseModel):
     cod_acervo: int
     similarity: float
+    match_count: int
     chunk_index: int
     snippet: str
     titulo: str | None = None

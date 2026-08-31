@@ -32,7 +32,7 @@ sistema (com exemplo prático e solução de problemas comuns) está em
 
 | Módulo | O que faz | Tecnologia | Tipo |
 |---|---|---|---|
-| [`crawler/`](crawler/README.md) | Varre o acervo da Biblioteca CESAR por id, baixa PDF + metadados de TCCs/dissertações/teses elegíveis. | Java 17 + Maven | Batch (`run --rm`) |
+| [`crawler/`](crawler/README.md) | Varre o acervo da Biblioteca CESAR por id, baixa PDF + metadados de TCCs/dissertações/teses elegíveis. | Java 25 (virtual threads) + Maven | Batch (`run --rm`) |
 | [`ml-base/`](ml-base/README.md) | Imagem base compartilhada por `processing/embedding/` e `api/` — PyTorch CPU-only + `sentence-transformers` + modelo já baixado. Não é um serviço, precisa ser buildada antes dos dois. Fica solta na raiz (não agrupada com `database/` como "infra"): é uma camada de build reaproveitada por outros módulos, `database/` é um serviço com estado de verdade — categorias diferentes, agrupar as duas só pelo "não é lógica de negócio" bagunçaria mais do que ajudaria. | — | Imagem base (`docker build`) |
 | [`processing/`](processing/README.md) | Agrupa os dois estágios de processamento de texto: [`ingestion/`](processing/ingestion/README.md) (extrai texto dos PDFs, gera chunks) e [`embedding/`](processing/embedding/README.md) (gera vetores de 384 dim por chunk). Dockerfiles/imagens separados de propósito — pesos de dependência bem diferentes. | Python 3.12 (`pypdf` / `sentence-transformers` via `ml-base/`) | Batch (`run --rm`) |
 | [`database/`](database/README.md) | Schema PostgreSQL/pgvector (índice HNSW) + loader idempotente dos chunks/vetores. | PostgreSQL 16 + pgvector | Serviço (`postgres`, longa duração) + loader batch |

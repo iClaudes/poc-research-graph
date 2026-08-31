@@ -2,6 +2,7 @@ package school.cesar.researchgraph.crawler.download;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import school.cesar.researchgraph.crawler.http.RetryingHttp;
 
 import java.io.IOException;
 import java.net.URI;
@@ -56,6 +57,12 @@ public final class GoogleDriveDownloader {
             if (matcher.find()) {
                 log.warn("Drive retornou página de confirmação para fileId={}, tentando novamente com token", fileId);
                 response = get(url + "&confirm=" + matcher.group(1));
+
+                String retryContentType = response.headers().firstValue("content-type").orElse("");
+                if (retryContentType.startsWith("text/html")) {
+                    throw new IOException("Google Drive continuou retornando HTML após confirm= para fileId="
+                            + fileId + " (token pode ter expirado ou o arquivo exige permissão de acesso)");
+                }
             } else {
                 throw new IOException("Resposta HTML inesperada do Google Drive para fileId=" + fileId
                         + " (arquivo pode ter sido removido ou exigir permissão de acesso)");
@@ -71,6 +78,6 @@ public final class GoogleDriveDownloader {
                 .header("User-Agent", USER_AGENT)
                 .GET()
                 .build();
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        return RetryingHttp.send(httpClient, request, HttpResponse.BodyHandlers.ofByteArray(), 3, 500);
     }
 }
