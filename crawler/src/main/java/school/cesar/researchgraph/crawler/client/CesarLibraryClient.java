@@ -2,6 +2,7 @@ package school.cesar.researchgraph.crawler.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import school.cesar.researchgraph.crawler.http.RetryingHttp;
 
 import java.io.IOException;
 import java.net.URI;
@@ -45,7 +46,7 @@ public final class CesarLibraryClient {
                 .GET()
                 .build();
 
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = RetryingHttp.send(httpClient, request, HttpResponse.BodyHandlers.ofString(), 3, 300);
 
         if (response.statusCode() == 404) {
             return Optional.empty();
