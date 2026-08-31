@@ -9,6 +9,19 @@ pico (ver "Viés de tamanho" em api/README.md). No modo de busca em texto
 livre (um só vetor de referência) isso equivale a pegar só o melhor chunk,
 igual ao comportamento anterior — não há vetores extras pra formar um pico
 espúrio nesse modo.
+
+Filtro de chunk de referência genérico (modo por documento): testado num
+corpus maior, ficou claro que nem todo chunk do documento de referência é
+"assunto" — trechos de metodologia acadêmica ("abordagem qualitativa e
+quantitativa...") se repetem quase iguais em quase toda tese/TCC em
+português, então usá-los como vetor de busca acaba batendo um pouco em quase
+todo mundo, não por relação de conteúdo real. Antes de aceitar os resultados
+de um vetor de referência, olhamos em quantos documentos DISTINTOS os
+PER_QUERY_LIMIT vizinhos mais próximos caem — se estão espalhados demais
+(>= DIVERSITY_THRESHOLD do total), é sinal de linguagem genérica, e
+descartamos esse vetor de referência inteiro. Só faz sentido com múltiplos
+vetores de referência (modo por documento); com 1 vetor só (busca em texto
+livre) descartar deixaria a busca sem nenhum resultado.
 """
 import psycopg
 
@@ -16,6 +29,8 @@ PER_QUERY_LIMIT = 20
 MAX_REFERENCE_VECTORS = 150
 TOP_K_CHUNKS = 3
 MIN_SIMILARITY = 0.35
+DIVERSITY_THRESHOLD = 0.5
+MIN_ROWS_FOR_DIVERSITY_CHECK = 10
 
 
 def sample_evenly(items: list, max_count: int) -> list:
@@ -44,6 +59,11 @@ def recommend(
     # cod_acervo -> chunk_index -> {"similarity": ..., "snippet": ...}
     chunk_hits: dict[int, dict[int, dict]] = {}
 
+    # Só filtra vetor de referência genérico no modo por documento (vários
+    # vetores) — no modo texto-livre (1 vetor), descartá-lo deixaria a busca
+    # sem nenhum resultado.
+    filter_generic_vectors = len(query_vectors) > 1
+
     with conn.cursor() as cur:
         for vector in query_vectors:
             if exclude_cod_acervo is not None:
@@ -68,7 +88,14 @@ def recommend(
                     (vector, PER_QUERY_LIMIT),
                 )
 
-            for cod_acervo, chunk_index, text, dist in cur.fetchall():
+            rows = cur.fetchall()
+
+            if filter_generic_vectors and len(rows) >= MIN_ROWS_FOR_DIVERSITY_CHECK:
+                distinct_docs = {row[0] for row in rows}
+                if len(distinct_docs) / len(rows) >= DIVERSITY_THRESHOLD:
+                    continue  # chunk de referência genérico demais, descarta
+
+            for cod_acervo, chunk_index, text, dist in rows:
                 similarity = 1 - dist
                 doc_hits = chunk_hits.setdefault(cod_acervo, {})
                 current = doc_hits.get(chunk_index)
