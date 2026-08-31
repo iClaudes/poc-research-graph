@@ -38,7 +38,8 @@ def print_results(results: list[dict]) -> None:
         print("Nenhum resultado encontrado.")
         return
     for rank, r in enumerate(results, start=1):
-        print(f"{rank}. [{r['similarity']:.3f}] acervo {r['cod_acervo']} - {r.get('titulo')}")
+        trechos = f"{r['match_count']} trecho{'s' if r['match_count'] != 1 else ''} parecido{'s' if r['match_count'] != 1 else ''}"
+        print(f"{rank}. [{r['similarity']:.3f}] acervo {r['cod_acervo']} - {r.get('titulo')} ({trechos})")
         print(f"   autor: {r.get('autor')} | tipo: {r.get('tipo_obra')}")
         print(f"   trecho (chunk {r['chunk_index']}): {r['snippet']}")
 
