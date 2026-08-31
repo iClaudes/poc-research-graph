@@ -5,7 +5,7 @@ são comparáveis com os já armazenados no banco.
 """
 from sentence_transformers import SentenceTransformer
 
-DEFAULT_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+DEFAULT_MODEL = "BAAI/bge-m3"
 
 
 class Embedder:

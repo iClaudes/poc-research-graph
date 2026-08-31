@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     text TEXT NOT NULL,
     char_start INTEGER NOT NULL,
     char_end INTEGER NOT NULL,
-    embedding VECTOR(384) NOT NULL,
+    embedding VECTOR(1024) NOT NULL,
     embedding_model TEXT NOT NULL,
     UNIQUE (cod_acervo, chunk_index)
 );

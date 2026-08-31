@@ -9,7 +9,7 @@ from embedding.embedder import Embedder
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-5s %(message)s")
 logger = logging.getLogger("embedding")
 
-DEFAULT_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+DEFAULT_MODEL = "BAAI/bge-m3"
 
 
 def parse_args() -> argparse.Namespace:

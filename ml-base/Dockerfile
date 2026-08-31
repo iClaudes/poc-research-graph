@@ -12,4 +12,4 @@ ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir torch --index-url ${TORCH_INDEX_URL}
 RUN pip install --no-cache-dir "sentence-transformers>=3.0,<4"
 
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-m3')"
