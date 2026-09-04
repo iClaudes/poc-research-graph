@@ -46,3 +46,9 @@ recommendations/
 
 # IDE
 .idea/
+
+# Local notes with infra/credentials info, not for the repo
+TODO-SECURITY.md
+
+# Real credentials — .env.example stays committed as the template
+.env

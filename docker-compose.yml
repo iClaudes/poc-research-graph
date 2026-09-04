@@ -19,16 +19,16 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: research_graph
-      POSTGRES_PASSWORD: research_graph
-      POSTGRES_DB: research_graph
+      POSTGRES_USER: ${POSTGRES_USER:-research_graph}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-research_graph}
+      POSTGRES_DB: ${POSTGRES_DB:-research_graph}
     ports:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U research_graph -d research_graph"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-research_graph} -d ${POSTGRES_DB:-research_graph}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -39,7 +39,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://research_graph:research_graph@postgres:5432/research_graph
+      DATABASE_URL: postgresql://${POSTGRES_USER:-research_graph}:${POSTGRES_PASSWORD:-research_graph}@postgres:5432/${POSTGRES_DB:-research_graph}
     volumes:
       - ./embedded:/app/embedded:ro
 
@@ -49,7 +49,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://research_graph:research_graph@postgres:5432/research_graph
+      DATABASE_URL: postgresql://${POSTGRES_USER:-research_graph}:${POSTGRES_PASSWORD:-research_graph}@postgres:5432/${POSTGRES_DB:-research_graph}
     ports:
       - "8000:8000"
     volumes:
